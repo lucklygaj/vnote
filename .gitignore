@@ -19,3 +19,42 @@ build*
 .DS_Store
 .vscode
 dev.sh
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+BundleConfig.cmake
+*.dir/
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.slnx
+ALL_BUILD
+INSTALL
+PACKAGE
+ZERO_CHECK
+# Build artifacts
+*.dll
+*.exe
+*.lib
+*.exp
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+# Qt generated files
+*_autogen/
+*.rcc
+.qrc.stash
+*.qm
+.uic/
+.moc/
+.moc/
+# Qt build cache
+.qt/
+src/.lupdate
+libs/QHotkey 
+libs/vtextedit
