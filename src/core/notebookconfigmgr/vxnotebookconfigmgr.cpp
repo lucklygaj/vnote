@@ -20,6 +20,9 @@
 #include <utils/fileutils.h>
 #include <utils/pathutils.h>
 #include <utils/utils.h>
+#include <sync/giteesyncservice.h>
+#include <widgets/messageboxhelper.h>
+#include <core/vnotex.h>
 
 #include <utils/contentmediautils.h>
 
@@ -76,6 +79,11 @@ void VXNotebookConfigMgr::createEmptyRootNode() {
 }
 
 QSharedPointer<Node> VXNotebookConfigMgr::loadRootNode() {
+  auto &syncService = GiteeSyncService::getInst();
+  if (syncService.checkSyncEnabled()) {
+    syncService.pullDirectory("");
+  }
+
   auto nodeConfig = readNodeConfig("");
   QSharedPointer<Node> root = nodeConfigToNode(*nodeConfig, "", nullptr);
   root->setUse(Node::Use::Root);
@@ -387,6 +395,16 @@ void VXNotebookConfigMgr::loadNode(Node *p_node) {
     return;
   }
 
+  auto &syncService = GiteeSyncService::getInst();
+  if (syncService.checkSyncEnabled()) {
+    QString relativePath = getBackend()->getRelativePath(PathUtils::concatenateFilePath(p_node->fetchPath(), c_nodeConfigName));
+    QString content;
+    if (syncService.pullFile(relativePath, content)) {
+      auto configPath = getNodeConfigFilePath(p_node);
+      getBackend()->writeFile(configPath, content);
+    }
+  }
+
   auto config = readNodeConfig(p_node->fetchPath());
   Q_ASSERT(p_node->isContainer());
   loadFolderNode(p_node, *config);
@@ -398,6 +416,19 @@ void VXNotebookConfigMgr::saveNode(const Node *p_node) {
   } else {
     Q_ASSERT(!p_node->isRoot());
     writeNodeConfig(p_node->getParent());
+  }
+
+  auto &syncService = GiteeSyncService::getInst();
+  if (syncService.checkSyncEnabled()) {
+    QString relativePath = getBackend()->getRelativePath(getNodeConfigFilePath(p_node));
+    QString rootPath = getNotebook()->getRootFolderAbsolutePath();
+    QFile file(getNodeConfigFilePath(p_node));
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+      QString content = QString::fromUtf8(file.readAll());
+      file.close();
+      QString errorMsg;
+      syncService.pushFile(relativePath, rootPath, content, QStringLiteral("Update node config"), errorMsg);
+    }
   }
 }
 
@@ -649,6 +680,45 @@ void VXNotebookConfigMgr::removeNode(const QSharedPointer<Node> &p_node, bool p_
 
 void VXNotebookConfigMgr::removeFilesOfNode(Node *p_node, bool p_force) {
   Q_ASSERT(p_node->getNotebook() == getNotebook());
+
+  // Check if sync is enabled for remote deletion
+  auto &syncService = GiteeSyncService::getInst();
+  bool shouldSyncDelete = false;
+  if (syncService.checkSyncEnabled()) {
+    QString relativePath = getBackend()->getRelativePath(p_node->fetchPath());
+
+    // Check if directory is empty (we only sync file deletion or empty directory deletion)
+    if (p_node->isContainer() && p_node->getChildrenCount() > 0) {
+      // Directory is not empty, do not sync
+      qWarning() << "Directory is not empty, skipping remote sync deletion:" << relativePath;
+    } else {
+      // Ask user whether to sync deletion
+      QString questionText = p_node->isContainer()
+        ? QObject::tr("Do you want to delete the folder '%1' from Gitee as well?").arg(p_node->getName())
+        : QObject::tr("Do you want to delete the file '%1' from Gitee as well?").arg(p_node->getName());
+
+      int ret = MessageBoxHelper::questionYesNo(MessageBoxHelper::Question,
+                                                questionText,
+                                                QObject::tr("Sync Deletion"),
+                                                QString(),
+                                                (QWidget*)VNoteX::getInst().getMainWindow());
+      if (ret == QMessageBox::Yes) {
+        // Perform remote deletion
+        QString errorMsg;
+        bool success = syncService.deleteFile(relativePath, QObject::tr("Delete file"), errorMsg);
+        if (!success) {
+          MessageBoxHelper::notify(MessageBoxHelper::Critical,
+                                   QObject::tr("Failed to delete from Gitee"),
+                                   QObject::tr("Failed to delete from Gitee: %1").arg(errorMsg),
+                                   QString(),
+                                   (QWidget*)VNoteX::getInst().getMainWindow());
+          // Continue with local deletion even if remote deletion failed
+        }
+      }
+    }
+  }
+
+  // Perform local deletion
   if (!p_node->isContainer()) {
     // Delete attachment.
     if (!p_node->getAttachmentFolder().isEmpty()) {

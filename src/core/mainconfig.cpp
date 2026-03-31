@@ -9,6 +9,8 @@
 #include "markdowneditorconfig.h"
 #include "texteditorconfig.h"
 #include "widgetconfig.h"
+#include "sync/giteesyncconfig.h"
+#include "sync/giteesyncservice.h"
 
 using namespace vnotex;
 
@@ -16,7 +18,8 @@ bool MainConfig::s_versionChanged = false;
 
 MainConfig::MainConfig(ConfigMgr *p_mgr)
     : IConfig(p_mgr, nullptr), m_coreConfig(new CoreConfig(p_mgr, this)),
-      m_editorConfig(new EditorConfig(p_mgr, this)), m_widgetConfig(new WidgetConfig(p_mgr, this)) {
+      m_editorConfig(new EditorConfig(p_mgr, this)), m_widgetConfig(new WidgetConfig(p_mgr, this)),
+      m_giteeSyncConfig(new GiteeSyncConfig(p_mgr, this)) {
 }
 
 MainConfig::~MainConfig() {}
@@ -35,6 +38,11 @@ void MainConfig::init() {
   m_editorConfig->init(appJobj, userJobj);
 
   m_widgetConfig->init(appJobj, userJobj);
+
+  m_giteeSyncConfig->init(appJobj, userJobj);
+
+  // Initialize GiteeSyncService with config
+  GiteeSyncService::getInst().init(m_giteeSyncConfig.data());
 
   if (isVersionChanged()) {
     doVersionSpecificOverride();
@@ -69,6 +77,8 @@ EditorConfig &MainConfig::getEditorConfig() { return *m_editorConfig; }
 
 WidgetConfig &MainConfig::getWidgetConfig() { return *m_widgetConfig; }
 
+GiteeSyncConfig &MainConfig::getGiteeSyncConfig() { return *m_giteeSyncConfig; }
+
 void MainConfig::writeToSettings() const { getMgr()->writeUserSettings(toJson()); }
 
 QJsonObject MainConfig::toJson() const {
@@ -77,6 +87,7 @@ QJsonObject MainConfig::toJson() const {
   obj[m_coreConfig->getSessionName()] = m_coreConfig->toJson();
   obj[m_editorConfig->getSessionName()] = m_editorConfig->toJson();
   obj[m_widgetConfig->getSessionName()] = m_widgetConfig->toJson();
+  obj[m_giteeSyncConfig->getSessionName()] = m_giteeSyncConfig->toJson();
   return obj;
 }
 

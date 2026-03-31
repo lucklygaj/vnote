@@ -56,5 +56,7 @@ ZERO_CHECK
 # Qt build cache
 .qt/
 src/.lupdate
-libs/QHotkey 
-libs/vtextedit
+src/x64/
+src/Win32/
+**/x64/
+**/Win32/

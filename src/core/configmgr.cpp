@@ -325,6 +325,8 @@ EditorConfig &ConfigMgr::getEditorConfig() { return m_config->getEditorConfig();
 
 WidgetConfig &ConfigMgr::getWidgetConfig() { return m_config->getWidgetConfig(); }
 
+GiteeSyncConfig &ConfigMgr::getGiteeSyncConfig() { return m_config->getGiteeSyncConfig(); }
+
 QString ConfigMgr::getAppFolder() const { return m_appConfigFolderPath; }
 
 QString ConfigMgr::getUserFolder() const { return m_userConfigFolderPath; }

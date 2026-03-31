@@ -22,6 +22,7 @@
 #include "editorpage.h"
 #include "fileassociationpage.h"
 #include "generalpage.h"
+#include "giteesyncpage.h"
 #include "imagehostpage.h"
 #include "markdowneditorpage.h"
 #include "miscpage.h"
@@ -110,6 +111,12 @@ void SettingsDialog::setupPages() {
   // Note Management.
   {
     auto page = new NoteManagementPage(this);
+    addPage(page);
+  }
+
+  // Gitee Sync.
+  {
+    auto page = new GiteeSyncPage(this);
     addPage(page);
   }
 

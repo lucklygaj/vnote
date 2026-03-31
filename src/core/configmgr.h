@@ -16,6 +16,7 @@ class SessionConfig;
 class CoreConfig;
 class EditorConfig;
 class WidgetConfig;
+class GiteeSyncConfig;
 
 class ConfigMgr : public QObject, private Noncopyable {
   Q_OBJECT
@@ -51,6 +52,8 @@ public:
   EditorConfig &getEditorConfig();
 
   WidgetConfig &getWidgetConfig();
+
+  GiteeSyncConfig &getGiteeSyncConfig();
 
   QString getAppFolder() const;
 

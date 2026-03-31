@@ -131,6 +131,9 @@ public:
   QJsonObject getExtraConfig(const QString &p_key) const;
   virtual void setExtraConfig(const QString &p_key, const QJsonObject &p_obj) = 0;
 
+  // Get config version for compatibility checks
+  virtual int getConfigVersion() const = 0;
+
   // Get content files recursively.
   QList<QSharedPointer<File>> collectFiles();
 

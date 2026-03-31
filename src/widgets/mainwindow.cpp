@@ -45,6 +45,7 @@
 #include "windowspanel.h"
 #include "windowsprovider.h"
 #include <core/configmgr.h>
+#include <sync/giteesyncservice.h>
 #include <core/coreconfig.h>
 #include <core/events.h>
 #include <core/exception.h>
@@ -177,6 +178,32 @@ void MainWindow::setupStatusBar() {
   StatusBarHelper::setupStatusBar(this);
   connect(&VNoteX::getInst(), &VNoteX::statusMessageRequested, statusBar(),
           &QStatusBar::showMessage);
+
+  // Create Gitee sync status indicator
+  m_giteeSyncStatusWidget = new QLabel(tr("Gitee Sync"), this);
+  m_giteeSyncStatusWidget->setToolTip(tr("Gitee Sync Status"));
+  statusBar()->addPermanentWidget(m_giteeSyncStatusWidget);
+
+  // Connect Gitee sync service signals
+  auto &giteeService = GiteeSyncService::getInst();
+  connect(&giteeService, &GiteeSyncService::syncStatusChanged, this, [this](bool p_syncing) {
+    if (p_syncing) {
+      m_giteeSyncStatusWidget->setText(tr("Gitee Sync: ") + tr("Syncing..."));
+      m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #2196F3; }");
+    } else {
+      m_giteeSyncStatusWidget->setText(tr("Gitee Sync"));
+      m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #757575; }");
+    }
+  });
+  connect(&giteeService, &GiteeSyncService::syncFailed, this, [this](const QString &p_error) {
+    m_giteeSyncStatusWidget->setText(tr("Gitee Sync: ") + tr("Failed"));
+    m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #F44336; }");
+    statusBar()->showMessage(tr("Gitee sync failed: %1").arg(p_error), 5000);
+  });
+  connect(&giteeService, &GiteeSyncService::rateLimited, this, [this](int p_waitSeconds) {
+    m_giteeSyncStatusWidget->setText(tr("Gitee Sync: ") + tr("Rate limited (wait %1s)").arg(p_waitSeconds));
+    m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #FF9800; }");
+  });
 }
 
 void MainWindow::setupTipsArea() {
@@ -377,6 +404,9 @@ void MainWindow::closeEvent(QCloseEvent *p_event) {
   }
 
   if (isExit || !m_trayIcon->isVisible()) {
+    // All sync operations are now blocking, no pending tasks to check
+    // Nothing to do here
+
     // Signal out the close event.
     auto event = QSharedPointer<Event>::create();
     event->m_response = true;

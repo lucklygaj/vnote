@@ -1,6 +1,6 @@
 @echo off
 set QT_DIR=D:\Users\angel.guan\Qt\6.10.2\msvc2022_64\bin
-set TARGET_DIR=d:\Users\angel.guan\github\other\vnote\build\src\Release
+set TARGET_DIR=d:\Users\angel.guan\github\other\vnote\build\bin\Release
 
 echo Copying required Qt DLLs...
 

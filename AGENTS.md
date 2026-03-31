@@ -14,6 +14,37 @@ After cloning the repository, run the init script to set up your development env
 * **Run Single Test**: `ctest -R test_task` (use test name pattern matching)
 * **Format Code**: Use clang-format with provided `.clang-format` (100 char line limit, 2-space indent)
 
+## Build Artifact Rules (IRON LAW)
+
+All build artifacts MUST be placed under the build directory (`${CMAKE_BINARY_DIR}`),
+NEVER in the source tree. Violations must be fixed before any commit.
+
+### Output Directory Structure
+- Executables  -> `${CMAKE_BINARY_DIR}/bin/[CONFIG]/`
+- Shared libs  -> `${CMAKE_BINARY_DIR}/lib/[CONFIG]/`
+- Static libs  -> `${CMAKE_BINARY_DIR}/lib/[CONFIG]/`
+- Intermediate -> `${CMAKE_BINARY_DIR}/` only
+
+### Prohibited in Source Tree
+- No `.dll`, `.exe`, `.lib`, `.obj`, `.o`, `.a`, `.so`, `.dylib` files
+- No `CMakeFiles/`, `cmake_install.cmake`, `*.vcxproj`, `*.sln`
+- No `*_autogen/`, `.moc/`, `.uic/`, `.rcc` directories
+- No Qt plugin directories (`platforms/`, `iconengines/`, etc.)
+- No `build`, `build.*`, `build*` directories at any level
+
+### libs/ Directory Policy
+- `libs/` is a source dependency directory (git submodules), NOT a build output directory.
+- Third-party libraries under `libs/` must also output their build artifacts to `${CMAKE_BINARY_DIR}/`.
+- `target_link_directories()` must NOT point to source directories for build artifacts.
+
+### Pre-build Checklist
+Before each build, verify:
+1. `src/Release/` does not exist (or is empty)
+2. `bin/` does not exist at project root (or is empty)
+3. No `.dll`/`.lib`/`.exe` files in `libs/` subdirectories
+4. `.gitignore` covers all potential build artifacts
+
+
 ## C++ Code Style Guidelines
 
 * **Standards**: C++14, Qt 5/6 framework with CMAKE_AUTOMOC/AUTOUIC/AUTORCC enabled

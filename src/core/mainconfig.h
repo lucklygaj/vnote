@@ -12,6 +12,7 @@ namespace vnotex {
 class CoreConfig;
 class EditorConfig;
 class WidgetConfig;
+class GiteeSyncConfig;
 
 class MainConfig : public IConfig {
 public:
@@ -28,6 +29,8 @@ public:
   EditorConfig &getEditorConfig();
 
   WidgetConfig &getWidgetConfig();
+
+  GiteeSyncConfig &getGiteeSyncConfig();
 
   void writeToSettings() const Q_DECL_OVERRIDE;
 
@@ -55,6 +58,8 @@ private:
   QScopedPointer<EditorConfig> m_editorConfig;
 
   QScopedPointer<WidgetConfig> m_widgetConfig;
+
+  QScopedPointer<GiteeSyncConfig> m_giteeSyncConfig;
 
   static bool s_versionChanged;
 };

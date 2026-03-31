@@ -36,6 +36,7 @@ target_sources(vnote PRIVATE
     dialogs/settings/editorpage.cpp dialogs/settings/editorpage.h
     dialogs/settings/fileassociationpage.cpp dialogs/settings/fileassociationpage.h
     dialogs/settings/generalpage.cpp dialogs/settings/generalpage.h
+    dialogs/settings/giteesyncpage.cpp dialogs/settings/giteesyncpage.h
     dialogs/settings/imagehostpage.cpp dialogs/settings/imagehostpage.h
     dialogs/settings/markdowneditorpage.cpp dialogs/settings/markdowneditorpage.h
     dialogs/settings/miscpage.cpp dialogs/settings/miscpage.h

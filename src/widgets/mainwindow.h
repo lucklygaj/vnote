@@ -192,6 +192,8 @@ private:
 
   QLabel *m_tipsLabel = nullptr;
 
+  QLabel *m_giteeSyncStatusWidget = nullptr;
+
   QTimer *m_tipsTimer = nullptr;
 
   bool m_layoutReset = false;

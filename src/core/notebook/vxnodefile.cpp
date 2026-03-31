@@ -1,6 +1,7 @@
 #include "vxnodefile.h"
 
 #include <QImage>
+#include <QMessageBox>
 
 #include "notebook.h"
 #include "vxnode.h"
@@ -8,6 +9,10 @@
 #include <notebookconfigmgr/inotebookconfigmgr.h>
 #include <notebookconfigmgr/vxnotebookconfigmgr.h>
 #include <utils/pathutils.h>
+#include <sync/giteesyncservice.h>
+#include <widgets/messageboxhelper.h>
+#include <widgets/mainwindow.h>
+#include <core/vnotex.h>
 
 using namespace vnotex;
 
@@ -16,13 +21,44 @@ VXNodeFile::VXNodeFile(const QSharedPointer<VXNode> &p_node) : m_node(p_node) {
   setContentType(FileTypeHelper::getInst().getFileType(getContentPath()).m_type);
 }
 
-QString VXNodeFile::read() const { return m_node->getBackend()->readTextFile(m_node->fetchPath()); }
+QString VXNodeFile::read() const {
+  auto content = m_node->getBackend()->readTextFile(m_node->fetchPath());
+
+  auto &syncService = GiteeSyncService::getInst();
+  if (syncService.checkSyncEnabled()) {
+    QString relativePath = m_node->getNotebook()->getBackend()->getRelativePath(m_node->fetchPath());
+    QString remoteContent;
+    if (syncService.pullFile(relativePath, remoteContent)) {
+      content = remoteContent;
+    }
+  }
+
+  return content;
+}
 
 void VXNodeFile::write(const QString &p_content) {
   m_node->getBackend()->writeFile(m_node->fetchPath(), p_content);
 
   m_node->setModifiedTimeUtc();
   m_node->save();
+
+  auto &syncService = GiteeSyncService::getInst();
+  if (syncService.checkSyncEnabled()) {
+    QString relativePath = m_node->getNotebook()->getBackend()->getRelativePath(m_node->fetchPath());
+    QString rootPath = m_node->getNotebook()->getRootFolderAbsolutePath();
+
+    // Perform blocking sync with UI feedback
+    QString errorMsg;
+    bool success = syncService.pushFile(relativePath, rootPath, p_content, QStringLiteral("Update file"), errorMsg);
+
+    if (!success) {
+      MessageBoxHelper::notify(MessageBoxHelper::Critical,
+                               QObject::tr("Failed to sync to Gitee"),
+                               QObject::tr("Failed to sync to Gitee: %1").arg(errorMsg),
+                               QString(),
+                               (QWidget*)VNoteX::getInst().getMainWindow());
+    }
+  }
 }
 
 QString VXNodeFile::getName() const { return m_node->getName(); }

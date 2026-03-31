@@ -143,6 +143,11 @@ protected:
     return read(p_default, p_user, p_key).toInt();
   }
 
+  static int readInt(const QJsonObject &p_default, const QJsonObject &p_user,
+                     const QString &p_key, int p_defaultValue) {
+    return isUndefinedKey(p_default, p_user, p_key) ? p_defaultValue : readInt(p_default, p_user, p_key);
+  }
+
   static qreal readReal(const QJsonObject &p_default, const QJsonObject &p_user,
                         const QString &p_key) {
     return read(p_default, p_user, p_key).toDouble();
@@ -151,6 +156,22 @@ protected:
   static bool isUndefinedKey(const QJsonObject &p_default, const QJsonObject &p_user,
                              const QString &p_key) {
     return !p_default.contains(p_key) && !p_user.contains(p_key);
+  }
+
+  static void writeString(QJsonObject &p_obj, const QString &p_key, const QString &p_value) {
+    if (p_value.isEmpty()) {
+      p_obj.remove(p_key);
+    } else {
+      p_obj[p_key] = p_value;
+    }
+  }
+
+  static void writeBool(QJsonObject &p_obj, const QString &p_key, bool p_value) {
+    p_obj[p_key] = p_value;
+  }
+
+  static void writeInt(QJsonObject &p_obj, const QString &p_key, int p_value) {
+    p_obj[p_key] = p_value;
   }
 
   static bool isUndefinedKey(const QJsonObject &p_obj, const QString &p_key) {
