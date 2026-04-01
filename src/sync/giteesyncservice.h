@@ -5,6 +5,8 @@
 #include <QString>
 #include <QScopedPointer>
 #include <QFile>
+#include <QSet>
+#include <QMutex>
 
 #include "giteeapi.h"
 #include "shacache.h"
@@ -35,8 +37,9 @@ public:
   /**
    * Pull a file from Gitee
    * @param p_path File path in the repository
-   * @param p_content Output file content
-   * @return true if successful
+   * @param p_content Output file content (valid only if return true)
+   * @return true if successfully pulled remote content (p_content contains valid data to replace local),
+   *         false to keep local content (skip or failed)
    */
   bool pullFile(const QString &p_path, QString &p_content);
 
@@ -68,6 +71,18 @@ public:
   bool deleteFile(const QString &p_path, const QString &p_commitMessage, QString &p_msg);
 
   /**
+   * Mark a file as newly created (skip pull for this file)
+   * @param p_path File path in the repository
+   */
+  void markFileAsNewlyCreated(const QString &p_path);
+
+  /**
+   * Get last sync timestamp
+   * @return last sync time in milliseconds since epoch, or 0 if never synced
+   */
+  qint64 getLastSyncTime() const;
+
+  /**
    * Update configuration
    */
   void updateConfig();
@@ -97,6 +112,13 @@ private:
   QScopedPointer<ShaCache> m_shaCache;
 
   GiteeSyncConfig *m_config;
+
+  QSet<QString> m_newlyCreatedFiles;
+
+  QSet<QString> m_pushingFiles;
+  QMutex m_pushMutex;
+
+  qint64 m_lastSyncTime;
 
   static GiteeSyncService s_inst;
 };

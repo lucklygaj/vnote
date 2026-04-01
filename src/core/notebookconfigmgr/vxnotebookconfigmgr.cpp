@@ -1,6 +1,8 @@
 #include "vxnotebookconfigmgr.h"
 
 #include <QDebug>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -152,6 +154,29 @@ void VXNotebookConfigMgr::writeNodeConfig(const Node *p_node) {
   writeNodeConfig(getNodeConfigFilePath(p_node), *config);
 }
 
+void VXNotebookConfigMgr::pushNodeConfig(const Node *p_node) const {
+  if (!p_node || !p_node->isContainer()) {
+    return;
+  }
+
+  auto &syncService = GiteeSyncService::getInst();
+  if (!syncService.checkSyncEnabled()) {
+    return;
+  }
+
+  QString configPath = getNodeConfigFilePath(p_node);
+  QString relativePath = getBackend()->getRelativePath(configPath);
+  QString rootPath = getNotebook()->getRootFolderAbsolutePath();
+
+  QFile file(configPath);
+  if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QString content = QString::fromUtf8(file.readAll());
+    file.close();
+    QString errorMsg;
+    syncService.pushFile(relativePath, rootPath, content, QStringLiteral("Update node config"), errorMsg);
+  }
+}
+
 QSharedPointer<Node> VXNotebookConfigMgr::nodeConfigToNode(const NodeConfig &p_config,
                                                            const QString &p_name, Node *p_parent) {
   auto node = QSharedPointer<VXNode>::create(p_name, getNotebook(), p_parent);
@@ -292,14 +317,53 @@ QSharedPointer<Node> VXNotebookConfigMgr::newFileNode(Node *p_parent, const QStr
       return nullptr;
     }
 
-    getBackend()->writeFile(node->fetchPath(), p_content);
+    // If content is empty, add default title (without extension)
+    QString content = p_content;
+    if (content.isEmpty()) {
+      QString title = QFileInfo(p_name).completeBaseName();
+      content = "# " + title + "\n\n";
+      qInfo() << "[VXNotebookConfigMgr::newFileNode] Added default title for empty file:" << title;
+    }
+
+    getBackend()->writeFile(node->fetchPath(), content);
     node->setExists(true);
+    qInfo() << "[VXNotebookConfigMgr::newFileNode] Local file created:" << node->fetchPath() << "Content length:" << content.length();
+
+    // 标记为新创建的文件，避免后续 pull 时重复询问
+    if (GiteeSyncService::getInst().checkSyncEnabled()) {
+      const auto relativePath = getBackend()->getRelativePath(node->fetchPath());
+      qInfo() << "[VXNotebookConfigMgr::newFileNode] Marking new file with relative path:" << relativePath << "Absolute path:" << node->fetchPath();
+      GiteeSyncService::getInst().markFileAsNewlyCreated(relativePath);
+    }
+
+    // 立即同步到 Gitee
+    if (GiteeSyncService::getInst().checkSyncEnabled()) {
+      QString errorMsg;
+      const auto relativePath = getBackend()->getRelativePath(node->fetchPath());
+      const auto rootPath = notebook->getRootFolderAbsolutePath();
+      qInfo() << "[VXNotebookConfigMgr::newFileNode] Pushing new file to Gitee - Relative path:" << relativePath << "Root path:" << rootPath;
+
+      qInfo() << "[VXNotebookConfigMgr::newFileNode] Actual content to push, length:" << content.length() << "First 100 chars:" << content.left(100);
+
+      // Skip sync if content is empty or whitespace only
+      if (content.trimmed().isEmpty()) {
+        qInfo() << "[VXNotebookConfigMgr::newFileNode] Skipping Gitee sync for empty file:" << relativePath;
+      } else {
+        GiteeSyncService::getInst().pushFile(relativePath, rootPath, content,
+                                              tr("Create file: %1").arg(p_name), errorMsg);
+        qInfo() << "[VXNotebookConfigMgr::newFileNode] Push result - errorMsg:" << errorMsg;
+        if (!errorMsg.isEmpty()) {
+          qWarning() << "Failed to sync new file to Gitee:" << errorMsg;
+        }
+      }
+    }
   } else {
     node->setExists(getBackend()->existsFile(node->fetchPath()));
   }
 
   addChildNode(p_parent, node);
   writeNodeConfig(p_parent);
+  pushNodeConfig(p_parent);
 
   addNodeToDatabase(node.data());
 
@@ -334,9 +398,11 @@ QSharedPointer<Node> VXNotebookConfigMgr::newFolderNode(Node *p_parent, const QS
   }
 
   writeNodeConfig(node.data());
+  pushNodeConfig(node.data());
 
   addChildNode(p_parent, node);
   writeNodeConfig(p_parent);
+  pushNodeConfig(p_parent);
 
   addNodeToDatabase(node.data());
 
@@ -443,6 +509,7 @@ void VXNotebookConfigMgr::renameNode(Node *p_node, const QString &p_name) {
 
   p_node->setName(p_name);
   writeNodeConfig(p_node->getParent());
+  pushNodeConfig(p_node->getParent());
 
   ensureNodeInDatabase(p_node);
   updateNodeInDatabase(p_node);
@@ -556,6 +623,7 @@ QSharedPointer<Node> VXNotebookConfigMgr::copyFileNodeAsChildOf(const QSharedPoi
 
   addChildNode(p_dest, destNode);
   writeNodeConfig(p_dest);
+  pushNodeConfig(p_dest);
 
   if (p_updateDatabase) {
     if (p_move && sameNotebook) {
@@ -615,9 +683,11 @@ QSharedPointer<Node> VXNotebookConfigMgr::copyFolderNodeAsChildOf(const QSharedP
 
   destNode->setExists(true);
   writeNodeConfig(destNode.data());
+  pushNodeConfig(destNode.data());
 
   addChildNode(p_dest, destNode);
   writeNodeConfig(p_dest);
+  pushNodeConfig(p_dest);
 
   if (p_updateDatabase) {
     if (p_move && sameNotebook) {
@@ -675,6 +745,7 @@ void VXNotebookConfigMgr::removeNode(const QSharedPointer<Node> &p_node, bool p_
   if (auto parentNode = p_node->getParent()) {
     parentNode->removeChild(p_node);
     writeNodeConfig(parentNode);
+    pushNodeConfig(parentNode);
   }
 }
 
@@ -907,6 +978,7 @@ QSharedPointer<Node> VXNotebookConfigMgr::copyFileAsChildOf(const QString &p_src
   destNode->setExists(true);
   addChildNode(p_dest, destNode);
   writeNodeConfig(p_dest);
+  pushNodeConfig(p_dest);
 
   addNodeToDatabase(destNode.data());
 
@@ -942,9 +1014,11 @@ QSharedPointer<Node> VXNotebookConfigMgr::copyFolderAsChildOf(const QString &p_s
   destNode->setExists(true);
 
   writeNodeConfig(destNode.data());
+  pushNodeConfig(destNode.data());
 
   addChildNode(p_dest, destNode);
   writeNodeConfig(p_dest);
+  pushNodeConfig(p_dest);
 
   addNodeToDatabase(destNode.data());
 

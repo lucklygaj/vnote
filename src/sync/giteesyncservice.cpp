@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutexLocker>
 
 #include "sync/giteesyncconfig.h"
 
@@ -22,7 +23,7 @@ GiteeSyncService &GiteeSyncService::getInst() {
 
 GiteeSyncService::GiteeSyncService()
   : m_api(new GiteeApi(this)), m_shaCache(new ShaCache(this)),
-    m_config(nullptr) {
+    m_config(nullptr), m_lastSyncTime(0) {
   setupConnections();
 }
 
@@ -76,21 +77,35 @@ void GiteeSyncService::setupConnections() {
 }
 
 bool GiteeSyncService::pullFile(const QString &p_path, QString &p_content) {
-  qInfo() << "[GiteeSyncService] Pulling file:" << p_path;
+  qInfo() << "[GiteeSyncService::pullFile] START - Path:" << p_path;
 
   if (!checkSyncEnabled()) {
-    qInfo() << "[GiteeSyncService] Sync is disabled, skipping pull";
-    return true;
+    qInfo() << "[GiteeSyncService::pullFile] Sync is disabled, skipping pull";
+    return false;
+  }
+
+  if (m_newlyCreatedFiles.contains(p_path)) {
+    qInfo() << "[GiteeSyncService::pullFile] File is newly created, skipping pull:" << p_path;
+    QStringList list;
+    for (const auto &item : m_newlyCreatedFiles) {
+      list << item;
+    }
+    qInfo() << "[GiteeSyncService::pullFile] Newly created files set:" << list;
+    m_newlyCreatedFiles.remove(p_path);
+    qInfo() << "[GiteeSyncService::pullFile] Removed from newly created set, returning FALSE (keep local content)";
+    return false;
   }
 
   QString errorMsg;
   QString sha;
+  qInfo() << "[GiteeSyncService::pullFile] Fetching file from Gitee API";
   bool success = m_api->getFileContent(p_path, p_content, sha, errorMsg);
+  qInfo() << "[GiteeSyncService::pullFile] API result:" << success << "SHA:" << (sha.isEmpty() ? "(empty)" : sha.left(8) + "...") << "Remote content length:" << p_content.length();
 
   if (!success) {
     if (errorMsg.isEmpty()) {
       // File doesn't exist on Gitee (404), ask user whether to create it
-      qInfo() << "[GiteeSyncService] File not found on Gitee, asking user whether to create it:" << p_path;
+      qInfo() << "[GiteeSyncService::pullFile] File not found on Gitee (404), asking user whether to create it:" << p_path;
       QString questionText = tr("File '%1' does not exist in Gitee repository. Do you want to create it?").arg(p_path);
       int ret = MessageBoxHelper::questionYesNo(MessageBoxHelper::Question, questionText, tr("Create file on Gitee"),
                                                  QString(), VNoteX::getInst().getMainWindow());
@@ -99,7 +114,7 @@ bool GiteeSyncService::pullFile(const QString &p_path, QString &p_content) {
         QFile file(p_path);
         if (!file.open(QIODevice::ReadOnly)) {
           QString msg = tr("Failed to open local file: %1").arg(p_path);
-          qCritical() << "[GiteeSyncService]" << msg;
+          qCritical() << "[GiteeSyncService::pullFile]" << msg;
           emit syncFailed(msg);
           return false;
         }
@@ -110,23 +125,25 @@ bool GiteeSyncService::pullFile(const QString &p_path, QString &p_content) {
         QString createErrorMsg;
         QString sha = m_api->createFile(p_path, content, tr("Create file from local"), createErrorMsg);
         if (sha.isEmpty()) {
-          qCritical() << "[GiteeSyncService] Failed to create file on Gitee:" << createErrorMsg;
+          qCritical() << "[GiteeSyncService::pullFile] Failed to create file on Gitee:" << createErrorMsg;
           emit syncFailed(createErrorMsg);
           return false;
         }
         m_shaCache->updateSha(p_path, sha);
-        qInfo() << "[GiteeSyncService] File created on Gitee:" << p_path << "SHA:" << sha.left(8) + "...";
+        qInfo() << "[GiteeSyncService::pullFile] File created on Gitee:" << p_path << "SHA:" << sha.left(8) + "...";
       }
-      return true;
+      qInfo() << "[GiteeSyncService::pullFile] Returning FALSE (404 case - keep local content)";
+      return false;
     }
-    qCritical() << "[GiteeSyncService] Pull failed:" << errorMsg;
+    qCritical() << "[GiteeSyncService::pullFile] Pull failed:" << errorMsg;
     handlePullError(errorMsg);
     return false;
   }
 
   // Update SHA cache
   m_shaCache->updateSha(p_path, sha);
-  qInfo() << "[GiteeSyncService] File pulled successfully:" << p_path << "SHA:" << sha.left(8) + "...";
+  qInfo() << "[GiteeSyncService::pullFile] File pulled successfully, returning TRUE (WILL replace content)";
+  qInfo() << "[GiteeSyncService::pullFile] END - Path:" << p_path << "Content length:" << p_content.length();
 
   return true;
 }
@@ -181,65 +198,116 @@ bool GiteeSyncService::pullDirectory(const QString &p_path) {
 }
 
 bool GiteeSyncService::pushFile(const QString &p_path, const QString &p_rootFolderPath, const QString &p_content, const QString &p_commitMessage, QString &p_msg) {
-  qInfo() << "[GiteeSyncService] Pushing file (blocking) - File:" << p_path << "Root:" << p_rootFolderPath << "Message:" << p_commitMessage;
+  qInfo() << "[GiteeSyncService::pushFile] START - Path:" << p_path << "Root:" << p_rootFolderPath << "Message:" << p_commitMessage;
+  qInfo() << "[GiteeSyncService::pushFile] Local content length:" << p_content.length() << "First 100 chars:" << p_content.left(100);
+
+  // Check if this file is already being pushed (prevent concurrent pushes)
+  {
+    QMutexLocker locker(&m_pushMutex);
+    if (m_pushingFiles.contains(p_path)) {
+      qWarning() << "[GiteeSyncService::pushFile] Push already in progress for:" << p_path << "- skipping duplicate request";
+      return false;
+    }
+    m_pushingFiles.insert(p_path);
+  }
 
   if (!checkSyncEnabled()) {
-    qInfo() << "[GiteeSyncService] Sync is disabled, skipping push";
+    qInfo() << "[GiteeSyncService::pushFile] Sync is disabled, skipping push";
+    QMutexLocker locker(&m_pushMutex);
+    m_pushingFiles.remove(p_path);
     return true;
   }
 
   // Get current SHA from cache
   QString sha = m_shaCache->getSha(p_path);
-  qInfo() << "[GiteeSyncService] Cached SHA:" << (sha.isEmpty() ? "(empty)" : sha.left(8) + "...");
+  qInfo() << "[GiteeSyncService::pushFile] Cached SHA for" << p_path << ":" << (sha.isEmpty() ? "(empty)" : sha.left(8) + "...");
+  qInfo() << "[GiteeSyncService::pushFile] Full cached SHA:" << sha;
 
   if (sha.isEmpty()) {
-    qInfo() << "[GiteeSyncService] No cached SHA, fetching from Gitee";
+    qInfo() << "[GiteeSyncService::pushFile] No cached SHA, fetching from Gitee API";
     // Try to get SHA from Gitee
     QString errorMsg;
     if (!m_api->getFileSha(p_path, sha, errorMsg)) {
+      qInfo() << "[GiteeSyncService::pushFile] getFileSha failed, errorMsg:" << errorMsg;
       if (errorMsg.contains("404") || errorMsg.isEmpty()) {
         // File doesn't exist on Gitee, create it
-        qInfo() << "[GiteeSyncService] File doesn't exist on Gitee (404), creating file";
+        qInfo() << "[GiteeSyncService::pushFile] File doesn't exist on Gitee (404), creating file";
         QString newSha = m_api->createFile(p_path, p_content, p_commitMessage, p_msg);
+        qInfo() << "[GiteeSyncService::pushFile] createFile result - newSha:" << (newSha.isEmpty() ? "(empty)" : newSha.left(8) + "...") << "errorMsg:" << p_msg;
         if (newSha.isEmpty()) {
-          qCritical() << "[GiteeSyncService] Failed to create file on Gitee:" << p_msg;
+          qCritical() << "[GiteeSyncService::pushFile] Failed to create file on Gitee:" << p_msg;
+          QMutexLocker locker(&m_pushMutex);
+          m_pushingFiles.remove(p_path);
           return false;
         }
         m_shaCache->updateSha(p_path, newSha);
-        qInfo() << "[GiteeSyncService] File created on Gitee:" << p_path << "SHA:" << newSha.left(8) + "...";
+        qInfo() << "[GiteeSyncService::pushFile] File created on Gitee:" << p_path << "SHA:" << newSha.left(8) + "...";
+        m_lastSyncTime = QDateTime::currentMSecsSinceEpoch();
+        QMutexLocker locker(&m_pushMutex);
+        m_pushingFiles.remove(p_path);
         return true;
       } else {
-        qCritical() << "[GiteeSyncService] Failed to get file SHA:" << errorMsg;
+        qCritical() << "[GiteeSyncService::pushFile] Failed to get file SHA:" << errorMsg;
         p_msg = errorMsg;
+        QMutexLocker locker(&m_pushMutex);
+        m_pushingFiles.remove(p_path);
         return false;
       }
     } else {
       m_shaCache->updateSha(p_path, sha);
-      qInfo() << "[GiteeSyncService] SHA fetched from Gitee:" << sha.left(8) + "...";
+      qInfo() << "[GiteeSyncService::pushFile] SHA fetched from Gitee:" << sha.left(8) + "...";
+      qInfo() << "[GiteeSyncService::pushFile] Full fetched SHA:" << sha;
     }
   }
 
   // Update file
-  qInfo() << "[GiteeSyncService] Updating file on Gitee";
+  qInfo() << "[GiteeSyncService::pushFile] Calling updateFile with SHA:" << sha.left(8) + "...";
   QString newSha = m_api->updateFile(p_path, p_content, p_commitMessage, sha, p_msg);
+  qInfo() << "[GiteeSyncService::pushFile] updateFile result - newSha:" << (newSha.isEmpty() ? "(empty)" : newSha.left(8) + "...") << "errorMsg:" << p_msg;
+  qInfo() << "[GiteeSyncService::pushFile] Full newSha:" << newSha;
+
   if (newSha.isEmpty()) {
+    qInfo() << "[GiteeSyncService::pushFile] Push failed, checking error type";
     if (p_msg.contains("409")) {
       // SHA conflict, retry with new SHA
-      qWarning() << "[GiteeSyncService] SHA conflict detected, retrying with new SHA";
-      return retryPushWithNewSha(p_path, p_content, p_commitMessage);
+      qWarning() << "[GiteeSyncService::pushFile] SHA conflict (409) detected, retrying with new SHA";
+      bool retryResult = retryPushWithNewSha(p_path, p_content, p_commitMessage);
+      QMutexLocker locker(&m_pushMutex);
+      m_pushingFiles.remove(p_path);
+      return retryResult;
     } else if (p_msg.contains("429")) {
       // Rate limited
-      qWarning() << "[GiteeSyncService] Rate limited when pushing:" << p_path;
+      qWarning() << "[GiteeSyncService::pushFile] Rate limited (429) when pushing:" << p_path;
       emit rateLimited(60);
+      QMutexLocker locker(&m_pushMutex);
+      m_pushingFiles.remove(p_path);
+      return false;
+    } else if (p_msg.contains("400") && p_msg.contains("Blob SHA does not match")) {
+      // 400 error with SHA mismatch
+      qCritical() << "[GiteeSyncService::pushFile] 400 Blob SHA does not match - Cached SHA:" << sha;
+      qCritical() << "[GiteeSyncService::pushFile] This indicates a cache-Gitee mismatch. Consider clearing cache for this file.";
+      QMutexLocker locker(&m_pushMutex);
+      m_pushingFiles.remove(p_path);
       return false;
     } else {
-      qCritical() << "[GiteeSyncService] Push failed:" << p_msg;
+      qCritical() << "[GiteeSyncService::pushFile] Push failed with unknown error:" << p_msg;
+      QMutexLocker locker(&m_pushMutex);
+      m_pushingFiles.remove(p_path);
       return false;
     }
   }
 
   m_shaCache->updateSha(p_path, newSha);
-  qInfo() << "[GiteeSyncService] File pushed to Gitee successfully:" << p_path << "New SHA:" << newSha.left(8) + "...";
+  qInfo() << "[GiteeSyncService::pushFile] File pushed to Gitee successfully:" << p_path << "New SHA:" << newSha.left(8) + "...";
+  qInfo() << "[GiteeSyncService::pushFile] END - Success";
+  m_lastSyncTime = QDateTime::currentMSecsSinceEpoch();
+
+  // Remove from pushing set
+  {
+    QMutexLocker locker(&m_pushMutex);
+    m_pushingFiles.remove(p_path);
+  }
+
   return true;
 }
 
@@ -282,6 +350,26 @@ bool GiteeSyncService::deleteFile(const QString &p_path, const QString &p_commit
   }
 
   return success;
+}
+
+void GiteeSyncService::markFileAsNewlyCreated(const QString &p_path) {
+  qInfo() << "[GiteeSyncService::markFileAsNewlyCreated] START - Path:" << p_path;
+  QStringList list;
+  for (const auto &item : m_newlyCreatedFiles) {
+    list << item;
+  }
+  qInfo() << "[GiteeSyncService::markFileAsNewlyCreated] Current newly created files set:" << list;
+  m_newlyCreatedFiles.insert(p_path);
+  list.clear();
+  for (const auto &item : m_newlyCreatedFiles) {
+    list << item;
+  }
+  qInfo() << "[GiteeSyncService::markFileAsNewlyCreated] After insertion, newly created files set:" << list;
+  qInfo() << "[GiteeSyncService::markFileAsNewlyCreated] Total count:" << m_newlyCreatedFiles.count();
+}
+
+qint64 GiteeSyncService::getLastSyncTime() const {
+  return m_lastSyncTime;
 }
 
 void GiteeSyncService::handlePullError(const QString &p_msg) {

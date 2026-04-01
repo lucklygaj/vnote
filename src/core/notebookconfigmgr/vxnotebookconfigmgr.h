@@ -87,6 +87,8 @@ private:
 
   void writeNodeConfig(const Node *p_node);
 
+  void pushNodeConfig(const Node *p_node) const;
+
   QSharedPointer<Node> nodeConfigToNode(const vx_node_config::NodeConfig &p_config,
                                         const QString &p_name, Node *p_parent = nullptr);
 

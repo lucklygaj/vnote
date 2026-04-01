@@ -23,12 +23,17 @@ VXNodeFile::VXNodeFile(const QSharedPointer<VXNode> &p_node) : m_node(p_node) {
 
 QString VXNodeFile::read() const {
   auto content = m_node->getBackend()->readTextFile(m_node->fetchPath());
+  qInfo() << "[VXNodeFile::read] Local content length:" << content.length();
 
   auto &syncService = GiteeSyncService::getInst();
   if (syncService.checkSyncEnabled()) {
     QString relativePath = m_node->getNotebook()->getBackend()->getRelativePath(m_node->fetchPath());
+    qInfo() << "[VXNodeFile::read] Attempting pull for relative path:" << relativePath;
     QString remoteContent;
-    if (syncService.pullFile(relativePath, remoteContent)) {
+    bool pullResult = syncService.pullFile(relativePath, remoteContent);
+    qInfo() << "[VXNodeFile::read] Pull result:" << pullResult << "Remote content length:" << remoteContent.length();
+    if (pullResult) {
+      qInfo() << "[VXNodeFile::read] Replacing local content with remote content";
       content = remoteContent;
     }
   }
@@ -46,6 +51,12 @@ void VXNodeFile::write(const QString &p_content) {
   if (syncService.checkSyncEnabled()) {
     QString relativePath = m_node->getNotebook()->getBackend()->getRelativePath(m_node->fetchPath());
     QString rootPath = m_node->getNotebook()->getRootFolderAbsolutePath();
+
+    // Skip sync if content is empty or whitespace only
+    if (p_content.trimmed().isEmpty()) {
+      qInfo() << "[VXNodeFile::write] Skipping Gitee sync for empty file:" << relativePath;
+      return;
+    }
 
     // Perform blocking sync with UI feedback
     QString errorMsg;
