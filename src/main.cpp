@@ -27,6 +27,7 @@
 #include <utils/widgetutils.h>
 #include <widgets/mainwindow.h>
 #include <widgets/messageboxhelper.h>
+#include <sync/smartsyncscheduler.h>
 
 using namespace vnotex;
 
@@ -137,6 +138,11 @@ int main(int argc, char *argv[]) {
         e.what());
     return -1;
   }
+
+  // Now ConfigMgr is fully constructed, safe to init SyncStatusManager
+  // which needs ConfigMgr::getInst().getUserFolder().
+  SmartSyncScheduler::getInst().initStatusManager(
+      ConfigMgr::getInst().getUserFolder() + "/sync_state.json");
 
   // Init logger after app info is set.
   Logger::init(cmdOptions.m_verbose, cmdOptions.m_logToStderr);

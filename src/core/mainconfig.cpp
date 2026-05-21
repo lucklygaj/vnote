@@ -11,6 +11,7 @@
 #include "widgetconfig.h"
 #include "sync/giteesyncconfig.h"
 #include "sync/giteesyncservice.h"
+#include "sync/smartsyncscheduler.h"
 
 using namespace vnotex;
 
@@ -43,6 +44,9 @@ void MainConfig::init() {
 
   // Initialize GiteeSyncService with config
   GiteeSyncService::getInst().init(m_giteeSyncConfig.data());
+
+  // Initialize SmartSyncScheduler
+  SmartSyncScheduler::getInst().init();
 
   if (isVersionChanged()) {
     doVersionSpecificOverride();

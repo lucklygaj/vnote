@@ -59,6 +59,46 @@ void GiteeSyncConfig::setSyncEnabled(bool p_enabled) {
   updateConfig(m_syncEnabled, p_enabled, this);
 }
 
+int GiteeSyncConfig::getBatchWindowMs() const {
+  return m_batchWindowMs;
+}
+
+void GiteeSyncConfig::setBatchWindowMs(int p_ms) {
+  updateConfig(m_batchWindowMs, qBound(1000, p_ms, 10000), this);
+}
+
+GiteeSyncConfig::ConflictStrategy GiteeSyncConfig::getConflictStrategy() const {
+  return m_conflictStrategy;
+}
+
+void GiteeSyncConfig::setConflictStrategy(ConflictStrategy p_strategy) {
+  updateConfig(m_conflictStrategy, p_strategy, this);
+}
+
+int GiteeSyncConfig::getMaxRetryCount() const {
+  return m_maxRetryCount;
+}
+
+void GiteeSyncConfig::setMaxRetryCount(int p_count) {
+  updateConfig(m_maxRetryCount, p_count, this);
+}
+
+int GiteeSyncConfig::getRetryIntervalBase() const {
+  return m_retryIntervalBase;
+}
+
+void GiteeSyncConfig::setRetryIntervalBase(int p_ms) {
+  updateConfig(m_retryIntervalBase, p_ms, this);
+}
+
+bool GiteeSyncConfig::isOfflineRecoveryEnabled() const {
+  return m_offlineRecoveryEnabled;
+}
+
+void GiteeSyncConfig::setOfflineRecoveryEnabled(bool p_enabled) {
+  updateConfig(m_offlineRecoveryEnabled, p_enabled, this);
+}
+
 bool GiteeSyncConfig::validateConfig(QString &p_errorMsg) const {
   if (m_syncEnabled) {
     if (m_token.isEmpty()) {
@@ -96,6 +136,20 @@ void GiteeSyncConfig::loadGiteeSync(const QJsonObject &p_app, const QJsonObject 
   }
 
   m_syncEnabled = readBool(appGitee, userGitee, QStringLiteral("sync_enabled"));
+
+  // Smart sync settings
+  m_batchWindowMs = readInt(appGitee, userGitee, QStringLiteral("batch_window_ms"), 3000);
+  m_batchWindowMs = qBound(1000, m_batchWindowMs, 10000);
+
+  m_conflictStrategy = static_cast<ConflictStrategy>(
+    readInt(appGitee, userGitee, QStringLiteral("conflict_strategy"), 
+            static_cast<int>(ConflictStrategy::AskUser)));
+
+  m_maxRetryCount = readInt(appGitee, userGitee, QStringLiteral("max_retry_count"), 5);
+  m_retryIntervalBase = readInt(appGitee, userGitee, QStringLiteral("retry_interval_base"), 1000);
+  m_offlineRecoveryEnabled = isUndefinedKey(appGitee, userGitee, QStringLiteral("offline_recovery_enabled"))
+      ? true
+      : readBool(appGitee, userGitee, QStringLiteral("offline_recovery_enabled"));
 }
 
 QJsonObject GiteeSyncConfig::saveGiteeSync() const {
@@ -105,5 +159,13 @@ QJsonObject GiteeSyncConfig::saveGiteeSync() const {
   writeString(obj, QStringLiteral("repo"), m_repo);
   writeString(obj, QStringLiteral("branch"), m_branch);
   writeBool(obj, QStringLiteral("sync_enabled"), m_syncEnabled);
+
+  // Smart sync settings
+  writeInt(obj, QStringLiteral("batch_window_ms"), m_batchWindowMs);
+  writeInt(obj, QStringLiteral("conflict_strategy"), static_cast<int>(m_conflictStrategy));
+  writeInt(obj, QStringLiteral("max_retry_count"), m_maxRetryCount);
+  writeInt(obj, QStringLiteral("retry_interval_base"), m_retryIntervalBase);
+  writeBool(obj, QStringLiteral("offline_recovery_enabled"), m_offlineRecoveryEnabled);
+
   return obj;
 }

@@ -113,6 +113,8 @@ target_sources(vnote PRIVATE
     simplesegmenthighlighter.cpp simplesegmenthighlighter.h
     snippetpanel.cpp snippetpanel.h
     statusbarhelper.cpp statusbarhelper.h
+    syncstatusindicator.cpp syncstatusindicator.h
+    synccenterview.cpp synccenterview.h
     styleditemdelegate.cpp styleditemdelegate.h
     systemtrayhelper.cpp systemtrayhelper.h
     tagexplorer.cpp tagexplorer.h

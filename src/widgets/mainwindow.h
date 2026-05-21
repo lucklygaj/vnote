@@ -29,6 +29,7 @@ class HistoryPanel;
 class WindowsPanel;
 class ExportDialog;
 class ConsoleViewer;
+class SyncStatusIndicator;
 
 enum { RESTART_EXIT_CODE = 1000 };
 
@@ -192,7 +193,7 @@ private:
 
   QLabel *m_tipsLabel = nullptr;
 
-  QLabel *m_giteeSyncStatusWidget = nullptr;
+  SyncStatusIndicator *m_giteeSyncStatusWidget = nullptr;
 
   QTimer *m_tipsTimer = nullptr;
 

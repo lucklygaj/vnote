@@ -10,6 +10,7 @@
 #include <notebookconfigmgr/vxnotebookconfigmgr.h>
 #include <utils/pathutils.h>
 #include <sync/giteesyncservice.h>
+#include <sync/smartsyncscheduler.h>
 #include <widgets/messageboxhelper.h>
 #include <widgets/mainwindow.h>
 #include <core/vnotex.h>
@@ -58,17 +59,32 @@ void VXNodeFile::write(const QString &p_content) {
       return;
     }
 
-    // Perform blocking sync with UI feedback
-    QString errorMsg;
-    bool success = syncService.pushFile(relativePath, rootPath, p_content, QStringLiteral("Update file"), errorMsg);
+    // Use SmartSyncScheduler for non-blocking sync with batching/debouncing
+    auto &scheduler = SmartSyncScheduler::getInst();
+    scheduler.requestSync(relativePath, rootPath, p_content, SyncPriority::Normal);
+  }
+}
 
-    if (!success) {
-      MessageBoxHelper::notify(MessageBoxHelper::Critical,
-                               QObject::tr("Failed to sync to Gitee"),
-                               QObject::tr("Failed to sync to Gitee: %1").arg(errorMsg),
-                               QString(),
-                               (QWidget*)VNoteX::getInst().getMainWindow());
+void VXNodeFile::writeImmediate(const QString &p_content) {
+  m_node->getBackend()->writeFile(m_node->fetchPath(), p_content);
+
+  m_node->setModifiedTimeUtc();
+  m_node->save();
+
+  auto &syncService = GiteeSyncService::getInst();
+  if (syncService.checkSyncEnabled()) {
+    QString relativePath = m_node->getNotebook()->getBackend()->getRelativePath(m_node->fetchPath());
+    QString rootPath = m_node->getNotebook()->getRootFolderAbsolutePath();
+
+    // Skip sync if content is empty or whitespace only
+    if (p_content.trimmed().isEmpty()) {
+      qInfo() << "[VXNodeFile::writeImmediate] Skipping Gitee sync for empty file:" << relativePath;
+      return;
     }
+
+    // Request immediate sync (high priority, Ctrl+S scenario)
+    auto &scheduler = SmartSyncScheduler::getInst();
+    scheduler.requestImmediateSync(relativePath, rootPath, p_content);
   }
 }
 

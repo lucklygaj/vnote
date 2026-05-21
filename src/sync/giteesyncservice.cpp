@@ -15,10 +15,9 @@
 
 using namespace vnotex;
 
-GiteeSyncService GiteeSyncService::s_inst;
-
 GiteeSyncService &GiteeSyncService::getInst() {
-  return s_inst;
+  static GiteeSyncService inst;
+  return inst;
 }
 
 GiteeSyncService::GiteeSyncService()

@@ -5,6 +5,8 @@
 
 class QLineEdit;
 class QCheckBox;
+class QComboBox;
+class QSpinBox;
 
 namespace vnotex {
 class GiteeSyncPage : public SettingsPage {
@@ -31,6 +33,13 @@ private:
   QLineEdit *m_branchLineEdit = nullptr;
 
   QCheckBox *m_syncEnabledCheckBox = nullptr;
+
+  // Smart sync settings
+  QSpinBox *m_batchWindowSpinBox = nullptr;
+  QComboBox *m_conflictStrategyComboBox = nullptr;
+  QSpinBox *m_maxRetrySpinBox = nullptr;
+  QSpinBox *m_retryIntervalSpinBox = nullptr;
+  QCheckBox *m_offlineRecoveryCheckBox = nullptr;
 };
 } // namespace vnotex
 

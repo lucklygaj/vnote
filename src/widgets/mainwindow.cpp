@@ -44,6 +44,7 @@
 #include "vnotex.h"
 #include "windowspanel.h"
 #include "windowsprovider.h"
+#include "syncstatusindicator.h"
 #include <core/configmgr.h>
 #include <sync/giteesyncservice.h>
 #include <core/coreconfig.h>
@@ -179,30 +180,17 @@ void MainWindow::setupStatusBar() {
   connect(&VNoteX::getInst(), &VNoteX::statusMessageRequested, statusBar(),
           &QStatusBar::showMessage);
 
-  // Create Gitee sync status indicator
-  m_giteeSyncStatusWidget = new QLabel(tr("Gitee Sync"), this);
-  m_giteeSyncStatusWidget->setToolTip(tr("Gitee Sync Status"));
+  // Create Gitee sync status indicator (replaces old QLabel)
+  m_giteeSyncStatusWidget = new SyncStatusIndicator(this);
   statusBar()->addPermanentWidget(m_giteeSyncStatusWidget);
 
-  // Connect Gitee sync service signals
+  // Connect Gitee sync service signals for error/rate limit notifications
   auto &giteeService = GiteeSyncService::getInst();
-  connect(&giteeService, &GiteeSyncService::syncStatusChanged, this, [this](bool p_syncing) {
-    if (p_syncing) {
-      m_giteeSyncStatusWidget->setText(tr("Gitee Sync: ") + tr("Syncing..."));
-      m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #2196F3; }");
-    } else {
-      m_giteeSyncStatusWidget->setText(tr("Gitee Sync"));
-      m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #757575; }");
-    }
-  });
   connect(&giteeService, &GiteeSyncService::syncFailed, this, [this](const QString &p_error) {
-    m_giteeSyncStatusWidget->setText(tr("Gitee Sync: ") + tr("Failed"));
-    m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #F44336; }");
     statusBar()->showMessage(tr("Gitee sync failed: %1").arg(p_error), 5000);
   });
   connect(&giteeService, &GiteeSyncService::rateLimited, this, [this](int p_waitSeconds) {
-    m_giteeSyncStatusWidget->setText(tr("Gitee Sync: ") + tr("Rate limited (wait %1s)").arg(p_waitSeconds));
-    m_giteeSyncStatusWidget->setStyleSheet("QLabel { color: #FF9800; }");
+    statusBar()->showMessage(tr("Gitee sync rate limited, wait %1s").arg(p_waitSeconds), 5000);
   });
 }
 

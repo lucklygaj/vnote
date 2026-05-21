@@ -17,6 +17,9 @@ public:
 
   void write(const QString &p_content) Q_DECL_OVERRIDE;
 
+  // Immediate sync (high priority, used for Ctrl+S)
+  void writeImmediate(const QString &p_content);
+
   QString getName() const Q_DECL_OVERRIDE;
 
   QString getFilePath() const Q_DECL_OVERRIDE;

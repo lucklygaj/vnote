@@ -133,7 +133,7 @@ void ViewArea::handleNodeChange(Node *p_node, const QSharedPointer<Event> &p_eve
     return;
   }
 
-  bool ret = close(p_node, false);
+  bool ret = close(p_node, true);
   p_event->m_response = ret;
   p_event->m_handled = !ret;
 }

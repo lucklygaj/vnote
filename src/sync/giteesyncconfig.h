@@ -34,6 +34,23 @@ public:
   bool isSyncEnabled() const;
   void setSyncEnabled(bool p_enabled);
 
+  // Smart sync settings
+  int getBatchWindowMs() const;
+  void setBatchWindowMs(int p_ms);
+
+  enum class ConflictStrategy { AskUser, UseLocal, UseRemote };
+  ConflictStrategy getConflictStrategy() const;
+  void setConflictStrategy(ConflictStrategy p_strategy);
+
+  int getMaxRetryCount() const;
+  void setMaxRetryCount(int p_count);
+
+  int getRetryIntervalBase() const;
+  void setRetryIntervalBase(int p_ms);
+
+  bool isOfflineRecoveryEnabled() const;
+  void setOfflineRecoveryEnabled(bool p_enabled);
+
   bool validateConfig(QString &p_errorMsg) const;
 
 private:
@@ -57,6 +74,13 @@ private:
 
   // Whether Gitee sync is enabled (default: false)
   bool m_syncEnabled = false;
+
+  // Smart sync settings
+  int m_batchWindowMs = 3000;
+  ConflictStrategy m_conflictStrategy = ConflictStrategy::AskUser;
+  int m_maxRetryCount = 5;
+  int m_retryIntervalBase = 1000;
+  bool m_offlineRecoveryEnabled = true;
 };
 } // namespace vnotex
 

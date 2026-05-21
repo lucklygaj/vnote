@@ -485,6 +485,15 @@ void NotebookNodeExplorer::loadMasterNode(QTreeWidgetItem *p_item, Node *p_node,
 
   loadMasterNodeChildren(p_item, p_node, p_level - 1);
 
+  // For container nodes, ensure expansion indicator is shown even if children
+  // were not loaded due to depth limit (p_level < 0). Without a placeholder
+  // child, QTreeWidget won't show the expand arrow, requiring multiple clicks
+  // to expand after restart.
+  if (p_node->isContainer() && p_item->childCount() == 0) {
+    auto *placeholder = new QTreeWidgetItem(p_item);
+    placeholder->setHidden(true);
+  }
+
   if (getCache().m_masterStateCache->contains(p_item) && p_item->childCount() > 0) {
     if (p_item->isExpanded()) {
       loadMasterItemChildren(p_item);
@@ -2605,12 +2614,35 @@ void NotebookNodeExplorer::openCurrentNodeProperties(bool p_master) {
 }
 
 void NotebookNodeExplorer::loadMasterItemChildren(QTreeWidgetItem *p_item) const {
+  // Check if this item has a placeholder child (hidden item added to show
+  // expansion indicator). If so, remove it and load real children instead.
+  auto data = getItemNodeData(p_item);
+  if (data.isNode() && data.getNode()->isContainer()) {
+    bool hasPlaceholder = false;
+    auto cnt = p_item->childCount();
+    for (int i = 0; i < cnt; ++i) {
+      auto child = p_item->child(i);
+      if (child->isHidden()) {
+        hasPlaceholder = true;
+        break;
+      }
+    }
+
+    if (hasPlaceholder) {
+      // Remove placeholder and load real children
+      clearTreeWidgetItemChildren(p_item);
+      auto node = data.getNode();
+      loadMasterNodeChildren(p_item, node, 1); // Load with sufficient depth
+    }
+  }
+
+  // Lazy-load unloaded node children
   auto cnt = p_item->childCount();
   for (int i = 0; i < cnt; ++i) {
     auto child = p_item->child(i);
-    auto data = getItemNodeData(child);
-    if (data.isNode() && !data.isLoaded()) {
-      loadMasterNode(child, data.getNode(), 1);
+    auto childData = getItemNodeData(child);
+    if (childData.isNode() && !childData.isLoaded()) {
+      loadMasterNode(child, childData.getNode(), 1);
     }
   }
 }

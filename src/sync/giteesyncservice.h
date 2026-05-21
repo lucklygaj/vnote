@@ -119,8 +119,6 @@ private:
   QMutex m_pushMutex;
 
   qint64 m_lastSyncTime;
-
-  static GiteeSyncService s_inst;
 };
 } // namespace vnotex
 
