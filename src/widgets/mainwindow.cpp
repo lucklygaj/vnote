@@ -44,6 +44,7 @@
 #include "vnotex.h"
 #include "windowspanel.h"
 #include "windowsprovider.h"
+#include "synccenterview.h"
 #include "syncstatusindicator.h"
 #include <core/configmgr.h>
 #include <sync/giteesyncservice.h>
@@ -183,6 +184,12 @@ void MainWindow::setupStatusBar() {
   // Create Gitee sync status indicator (replaces old QLabel)
   m_giteeSyncStatusWidget = new SyncStatusIndicator(this);
   statusBar()->addPermanentWidget(m_giteeSyncStatusWidget);
+
+  // Connect "Open Sync Center" action to open SyncCenterView
+  connect(m_giteeSyncStatusWidget, &SyncStatusIndicator::syncCenterRequested, this, [this]() {
+    auto syncCenter = new SyncCenterView(this);
+    syncCenter->show();
+  }); // AI-Generated
 
   // Connect Gitee sync service signals for error/rate limit notifications
   auto &giteeService = GiteeSyncService::getInst();

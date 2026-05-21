@@ -64,6 +64,12 @@ public:
   // Cleanup
   void removeFile(const QString &p_path);
 
+  // Remove entries for files that no longer exist on disk
+  int cleanupStaleEntries();
+
+  // Get all tracked file states (for display in Sync Center)
+  const QMap<QString, FileSyncStateInfo> &getAllStates() const { return m_states; }
+
 signals:
   void stateChanged(const QString &p_path, FileSyncState p_state);
   void fileStateChanged(const QString &p_path);

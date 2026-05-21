@@ -31,6 +31,8 @@ private:
   int m_syncedCount = 0;
   int m_pausedCount = 0;
 
+  qint64 m_lastSyncTime = 0;
+
   QMenu *m_menu = nullptr;
 };
 

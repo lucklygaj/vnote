@@ -3,9 +3,11 @@
 #include <QMouseEvent>
 #include <QAction>
 #include <QActionGroup>
+#include <QDateTime>
 
 #include "sync/syncstatusmanager.h"
 #include "sync/smartsyncscheduler.h"
+#include "sync/giteesyncservice.h"
 
 using namespace vnotex;
 
@@ -16,6 +18,10 @@ SyncStatusIndicator::SyncStatusIndicator(QWidget *p_parent)
 
   setupMenu();
 
+  // Connect to GiteeSyncService for last sync time updates FIRST (must be before initial display)
+  auto &giteeService = GiteeSyncService::getInst();
+  m_lastSyncTime = giteeService.getLastSyncTime();
+
   // Connect to SyncStatusManager
   auto &statusMgr = SyncStatusManager::getInst();
   connect(&statusMgr, &SyncStatusManager::statisticsChanged,
@@ -23,7 +29,7 @@ SyncStatusIndicator::SyncStatusIndicator(QWidget *p_parent)
   connect(&statusMgr, &SyncStatusManager::fileStateChanged,
           this, &SyncStatusIndicator::onStateChanged);
 
-  // Initial update
+  // Initial update (AFTER m_lastSyncTime is set so time appears)
   onStatisticsChanged(
     statusMgr.getSyncedCount(),
     statusMgr.getPendingCount(),
@@ -31,6 +37,18 @@ SyncStatusIndicator::SyncStatusIndicator(QWidget *p_parent)
     statusMgr.getFailedCount(),
     statusMgr.getPausedCount()
   );
+
+  // Poll last sync time every 5 seconds to keep display current
+  QTimer *timePollTimer = new QTimer(this);
+  timePollTimer->setInterval(5000);
+  connect(timePollTimer, &QTimer::timeout, this, [this]() {
+    qint64 newTime = GiteeSyncService::getInst().getLastSyncTime();
+    if (newTime != m_lastSyncTime) {
+      m_lastSyncTime = newTime;
+      updateDisplay();
+    }
+  });
+  timePollTimer->start(); // AI-Generated
 }
 
 void SyncStatusIndicator::setupMenu() {
@@ -61,6 +79,13 @@ void SyncStatusIndicator::updateDisplay() {
   QString text;
   QString style;
 
+  // Format last sync time
+  QString timeStr;
+  if (m_lastSyncTime > 0) {
+    QDateTime dt = QDateTime::fromMSecsSinceEpoch(m_lastSyncTime);
+    timeStr = dt.toString("HH:mm:ss");
+  }
+
   if (m_syncingCount > 0) {
     text = QString("🔵 Syncing... (%1)").arg(m_syncingCount);
     style = "QLabel { color: #2196F3; }";
@@ -75,24 +100,37 @@ void SyncStatusIndicator::updateDisplay() {
     style = "QLabel { color: #4CAF50; }";
   }
 
+  // Append last sync time
+  if (!timeStr.isEmpty()) {
+    text += QString(" @ %1").arg(timeStr);
+  }
+
   setText(text);
   setStyleSheet(style);
 
   // Update tooltip
+  QString lastSyncDetail;
+  if (m_lastSyncTime > 0) {
+    lastSyncDetail = QDateTime::fromMSecsSinceEpoch(m_lastSyncTime).toString("yyyy-MM-dd HH:mm:ss");
+  } else {
+    lastSyncDetail = tr("Never");
+  }
   QString tooltip = QString("Gitee Sync Status\n"
                            "━━━━━━━━━━━━━━━━━\n"
                            "🟢 Synced: %1\n"
                            "🟡 Pending: %2\n"
                            "🔵 Syncing: %3\n"
                            "🔴 Failed: %4\n"
-                           "⚪ Paused: %5")
+                           "⚪ Paused: %5\n"
+                           "🕐 Last Push: %6")
     .arg(m_syncedCount)
     .arg(m_pendingCount)
     .arg(m_syncingCount)
     .arg(m_failedCount)
-    .arg(m_pausedCount);
+    .arg(m_pausedCount)
+    .arg(lastSyncDetail);
   setToolTip(tooltip);
-}
+} // AI-Generated
 
 void SyncStatusIndicator::onStatisticsChanged(int p_synced, int p_pending,
                                                int p_syncing, int p_failed, int p_paused) {

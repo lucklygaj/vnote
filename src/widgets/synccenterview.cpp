@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QGroupBox>
+#include <QFile>
 
 #include "sync/syncstatusmanager.h"
 #include "sync/smartsyncscheduler.h"
@@ -16,8 +17,9 @@
 using namespace vnotex;
 
 SyncCenterView::SyncCenterView(QWidget *p_parent)
-  : QWidget(p_parent) {
-  setupUI();
+  : QWidget(p_parent, Qt::Window | Qt::WindowCloseButtonHint | Qt::WindowTitleHint) { // AI-Generated
+  setAttribute(Qt::WA_DeleteOnClose);
+  setupUI(); // AI-Generated
 
   // Connect signals
   auto &statusMgr = SyncStatusManager::getInst();
@@ -138,26 +140,119 @@ void SyncCenterView::updateStatisticsDisplay() {
   );
 }
 
-void SyncCenterView::updateFileList() {
+void SyncCenterView::updateFileList() { // AI-Generated
   auto &statusMgr = SyncStatusManager::getInst();
+  const auto &allStates = statusMgr.getAllStates();
+
   m_fileListTable->setRowCount(0);
 
-  // Get all tracked files - iterate through states
-  // For now, we'll show the files that have non-SYNCED states
-  // This could be enhanced to show all files with sync history
+  if (allStates.isEmpty()) {
+    m_fileListTable->insertRow(0);
+    QTableWidgetItem *emptyItem = new QTableWidgetItem(tr("No sync records yet. Files will appear here after first sync."));
+    emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsEditable);
+    m_fileListTable->setItem(0, 0, emptyItem);
+    m_fileListTable->setSpan(0, 0, 1, 5);
+    return;
+  }
 
-  // Update table based on current state
-  // Since we don't have a direct way to iterate all states, 
-  // we'll update when the view is shown
-}
+  int row = 0;
+  for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+    const QString &path = it.key();
+    const FileSyncStateInfo &info = it.value();
 
-void SyncCenterView::updateFailureList() {
+    m_fileListTable->insertRow(row);
+
+    QTableWidgetItem *fileItem = new QTableWidgetItem(path);
+    fileItem->setData(Qt::UserRole, path);
+    m_fileListTable->setItem(row, 0, fileItem);
+
+    QString stateStr;
+    switch (info.state) {
+      case FileSyncState::SYNCED:  stateStr = tr("Synced");   break;
+      case FileSyncState::PENDING: stateStr = tr("Pending");  break;
+      case FileSyncState::SYNCING: stateStr = tr("Syncing");  break;
+      case FileSyncState::FAILED:  stateStr = tr("Failed");   break;
+      case FileSyncState::PAUSED:  stateStr = tr("Paused");   break;
+      default:                    stateStr = tr("Unknown"); break;
+    }
+    QTableWidgetItem *stateItem = new QTableWidgetItem(stateStr);
+    if (info.state == FileSyncState::PENDING) stateItem->setBackground(QBrush(QColor("#FFC107")));
+    else if (info.state == FileSyncState::SYNCING) stateItem->setBackground(QBrush(QColor("#2196F3")));
+    else if (info.state == FileSyncState::FAILED) stateItem->setBackground(QBrush(QColor("#F44336")));
+    else if (info.state == FileSyncState::PAUSED) stateItem->setBackground(QBrush(QColor("#9E9E9E")));
+    m_fileListTable->setItem(row, 1, stateItem);
+
+    if (info.lastModified > 0)
+      m_fileListTable->setItem(row, 2,
+        new QTableWidgetItem(QDateTime::fromMSecsSinceEpoch(info.lastModified).toString("yyyy-MM-dd HH:mm:ss")));
+
+    if (info.lastSyncTime > 0)
+      m_fileListTable->setItem(row, 3,
+        new QTableWidgetItem(QDateTime::fromMSecsSinceEpoch(info.lastSyncTime).toString("yyyy-MM-dd HH:mm:ss")));
+
+    if (info.state != FileSyncState::SYNCED) {
+      QPushButton *retryBtn = new QPushButton(tr("Retry"), this);
+      connect(retryBtn, &QPushButton::clicked, this, [this, row]() { retryFile(row); });
+      m_fileListTable->setCellWidget(row, 4, retryBtn);
+    }
+
+    ++row;
+  }
+} // AI-Generated
+
+void SyncCenterView::updateFailureList() { // AI-Generated
   auto &statusMgr = SyncStatusManager::getInst();
+  const auto &allStates = statusMgr.getAllStates();
+
   m_failureListTable->setRowCount(0);
 
-  // Failure records would be shown here
-  // Implementation would iterate through files with FAILED state
-}
+  qint64 sevenDaysAgo = QDateTime::currentDateTime().addDays(-7).toMSecsSinceEpoch();
+  int row = 0;
+
+  for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+    const QString &path = it.key();
+    const FileSyncStateInfo &info = it.value();
+
+    bool isFailed = (info.state == FileSyncState::FAILED);
+    bool hasError = !info.lastError.isEmpty();
+    if (!isFailed && !hasError) continue;
+    if (!isFailed && info.lastModified > 0 && info.lastModified < sevenDaysAgo) continue;
+
+    m_failureListTable->insertRow(row);
+
+    QTableWidgetItem *fileItem = new QTableWidgetItem(path);
+    fileItem->setData(Qt::UserRole, path);
+    m_failureListTable->setItem(row, 0, fileItem);
+    m_failureListTable->setItem(row, 1, new QTableWidgetItem(info.lastError.isEmpty() ? "-" : info.lastError));
+    m_failureListTable->setItem(row, 2, new QTableWidgetItem(QString::number(info.retryCount)));
+
+    QWidget *actionWidget = new QWidget(this);
+    QHBoxLayout *actionLayout = new QHBoxLayout(actionWidget);
+    actionLayout->setContentsMargins(4, 2, 4, 2);
+    actionLayout->setSpacing(4);
+
+    QPushButton *retryBtn = new QPushButton(tr("Retry"), this);
+    connect(retryBtn, &QPushButton::clicked, this, [this, row]() { retryFile(row); });
+    actionLayout->addWidget(retryBtn);
+
+    QPushButton *clearBtn = new QPushButton(tr("Clear"), this);
+    connect(clearBtn, &QPushButton::clicked, this, [this, row]() { clearFailure(row); });
+    actionLayout->addWidget(clearBtn);
+
+    actionLayout->addStretch();
+    m_failureListTable->setCellWidget(row, 3, actionWidget);
+
+    ++row;
+  }
+
+  if (row == 0) {
+    m_failureListTable->insertRow(0);
+    QTableWidgetItem *emptyItem = new QTableWidgetItem(tr("No failure records. Great job!"));
+    emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsEditable);
+    m_failureListTable->setItem(0, 0, emptyItem);
+    m_failureListTable->setSpan(0, 0, 1, 4);
+  }
+} // AI-Generated
 
 void SyncCenterView::syncNow() {
   SmartSyncScheduler::getInst().syncAllNow();

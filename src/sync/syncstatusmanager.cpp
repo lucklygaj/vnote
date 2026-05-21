@@ -232,6 +232,22 @@ void SyncStatusManager::removeFile(const QString &p_path) {
   }
 }
 
+int SyncStatusManager::cleanupStaleEntries() {
+  QStringList stalePaths;
+  for (auto it = m_states.constBegin(); it != m_states.constEnd(); ++it) {
+    if (!QFile::exists(it.key())) {
+      stalePaths << it.key();
+    }
+  }
+  for (const QString &path : stalePaths) {
+    m_states.remove(path);
+  }
+  if (!stalePaths.isEmpty()) {
+    notifyStatisticsChanged();
+  }
+  return stalePaths.size();
+}
+
 void SyncStatusManager::notifyStatisticsChanged() {
   emit statisticsChanged(getSyncedCount(), getPendingCount(), getSyncingCount(), getFailedCount(), getPausedCount());
 }
