@@ -156,11 +156,15 @@ QSize ViewArea::sizeHint() const {
 }
 
 void ViewArea::openBuffer(Buffer *p_buffer, const QSharedPointer<FileOpenParameters> &p_paras) {
+  qWarning() << "[ViewArea::openBuffer] buffer:" << p_buffer->getPath()
+           << "alwaysNewWindow:" << p_paras->m_alwaysNewWindow
+           << "focus:" << p_paras->m_focus;
   // We allow multiple ViewWindows of the same buffer in different workspaces by default.
   QVector<ViewWindow *> wins;
   if (!p_paras->m_alwaysNewWindow) {
     wins = findBufferInViewSplits(p_buffer);
   }
+  qWarning() << "[ViewArea::openBuffer] existing wins count:" << wins.size();
   if (wins.isEmpty()) {
     if (!m_currentSplit) {
       addFirstViewSplit();

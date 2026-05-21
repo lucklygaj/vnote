@@ -83,6 +83,10 @@ void BufferMgr::open(Node *p_node, const QSharedPointer<FileOpenParameters> &p_p
   }
 
   auto buffer = findBuffer(p_node);
+  qWarning() << "[BufferMgr::open] node:" << p_node->getName()
+           << "path:" << nodePath
+           << "id:" << p_node->getId()
+           << "findBuffer result:" << (buffer ? buffer->getPath() : "nullptr");
   if (!buffer || !isSameTypeBuffer(buffer, fileType)) {
     auto nodeFile = p_node->getContentFile();
     Q_ASSERT(nodeFile);
@@ -186,6 +190,16 @@ void BufferMgr::open(const QString &p_filePath, const QSharedPointer<FileOpenPar
 }
 
 Buffer *BufferMgr::findBuffer(const Node *p_node) const {
+  qWarning() << "[findBuffer(Node)] searching for node:" << (p_node ? p_node->getName() : "null")
+             << "id:" << (p_node ? p_node->getId() : -1)
+             << "total buffers:" << m_buffers.size();
+  int idx = 0;
+  for (const auto *buf : m_buffers) {
+    qWarning() << "  buffer[" << idx << "] path:" << buf->getPath()
+               << "type:" << (int)buf->getProviderType()
+               << "match result:" << buf->match(p_node);
+    ++idx;
+  }
   auto it = std::find_if(m_buffers.constBegin(), m_buffers.constEnd(),
                          [p_node](const Buffer *p_buffer) { return p_buffer->match(p_node); });
   if (it != m_buffers.constEnd()) {

@@ -17,10 +17,23 @@ FileBufferProvider::FileBufferProvider(const QSharedPointer<File> &p_file, Node 
 
 Buffer::ProviderType FileBufferProvider::getType() const { return Buffer::ProviderType::External; }
 
-bool FileBufferProvider::match(const Node *p_node) const {
-  Q_UNUSED(p_node);
-  return false;
-}
+bool FileBufferProvider::match(const Node *p_node) const { // AI-Generated
+  if (!p_node) {
+    return false;
+  }
+  // Match by attached node pointer first
+  if (c_nodeAttachedTo && c_nodeAttachedTo == p_node) {
+    qWarning() << "[FileBP::match] matched by c_nodeAttachedTo pointer";
+    return true;
+  }
+  // Fallback: always try to match by file path, even without c_nodeAttachedTo.
+  // This handles the case where session restore creates a FileBufferProvider with no node attachment.
+  bool pathMatch = PathUtils::areSamePaths(m_file->getFilePath(), p_node->fetchAbsolutePath());
+  if (pathMatch) {
+    qWarning() << "[FileBP::match] matched by file path:" << m_file->getFilePath();
+  }
+  return pathMatch;
+} // AI-Generated
 
 bool FileBufferProvider::match(const QString &p_filePath) const {
   return PathUtils::areSamePaths(m_file->getFilePath(), p_filePath);

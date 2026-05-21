@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QColorDialog>
+#include <QMessageBox>
 #include <QMenu>
 #include <QPainter>
 #include <QSet>
@@ -295,6 +296,9 @@ void NotebookNodeExplorer::setupMasterExplorer(QWidget *p_parent) {
 }
 
 void NotebookNodeExplorer::activateItemNode(const NodeData &p_data) {
+  qWarning() << "[activateItemNode] called, isValid:" << p_data.isValid()
+             << "isNode:" << p_data.isNode()
+             << "isExternal:" << p_data.isExternalNode();
   if (!p_data.isValid()) {
     return;
   }

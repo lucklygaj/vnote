@@ -16,7 +16,30 @@ NodeBufferProvider::NodeBufferProvider(const QSharedPointer<Node> &p_node,
 
 Buffer::ProviderType NodeBufferProvider::getType() const { return Buffer::ProviderType::Internal; }
 
-bool NodeBufferProvider::match(const Node *p_node) const { return m_node.data() == p_node; }
+bool NodeBufferProvider::match(const Node *p_node) const {
+  // First try pointer comparison for performance (same object instance)
+  if (m_node.data() == p_node) {
+    qWarning() << "[match] pointer match OK for node:" << m_node->getName()
+             << "id:" << m_node->getId();
+    return true;
+  }
+  // Fallback: match by Node ID to handle cases where different Node instances
+  // represent the same file (e.g., after session restore vs. tree node click)
+  qWarning() << "[match] pointer MISMATCH stored:" << (void*)m_node.data()
+           << "id:" << (m_node ? m_node->getId() : -1)
+           << "vs incoming:" << (void*)p_node
+           << "id:" << (p_node ? p_node->getId() : -1);
+  if (p_node && m_node->getId() != Node::InvalidId && p_node->getId() != Node::InvalidId) {
+    bool idMatch = m_node->getId() == p_node->getId();
+    qWarning() << "[match] ID match result:" << idMatch;
+    return idMatch;
+  }
+  if (!p_node || !m_node || p_node->getId() == Node::InvalidId || m_node->getId() == Node::InvalidId) {
+    qWarning() << "[match] InvalidId detected - stored id:" << (m_node ? m_node->getId() : -1)
+               << "incoming id:" << (p_node ? p_node->getId() : -1);
+  }
+  return false;
+}
 
 bool NodeBufferProvider::match(const QString &p_filePath) const {
   return PathUtils::areSamePaths(getPath(), p_filePath);
